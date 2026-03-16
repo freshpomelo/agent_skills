@@ -1,11 +1,11 @@
 ---
 name: sync-skills
-description: Sync installed Claude skills from ~/.claude/skills/ to the current git project, then commit and push. Use when the user asks to "同步skill"、"备份skill"、"sync skills"、"push skills to git", or wants to back up their installed skills to a git repository.
+description: Sync installed Claude skills from ~/.claude/skills/ to a GitHub repo, then commit and push. No local clone required. Use when the user asks to "同步skill"、"备份skill"、"sync skills"、"push skills to git", or wants to back up their installed skills to a git repository.
 ---
 
 # Sync Skills
 
-Sync all custom skills from `~/.claude/skills/` into the current project's `skills/` directory, then commit and push to remote.
+Sync all custom skills from `~/.claude/skills/` to a GitHub repo via temporary shallow clone. No pre-existing local clone needed.
 
 ## What Gets Synced
 
@@ -14,23 +14,22 @@ Sync all custom skills from `~/.claude/skills/` into the current project's `skil
 
 ## Usage
 
-Run the bundled script:
-
 ```bash
-bash scripts/sync_skills.sh <repo-path> [commit-message]
+bash scripts/sync_skills.sh <github-repo-url> [commit-message] [branch]
 ```
 
-- `repo-path`: Path to the git repo (defaults to `.`)
-- `commit-message`: Optional custom commit message (defaults to "Sync skills from ~/.claude/skills")
+- `github-repo-url` (required): e.g. `git@github.com:user/repo.git` or `https://github.com/user/repo.git`
+- `commit-message`: Optional (defaults to "Sync skills from ~/.claude/skills")
+- `branch`: Optional (defaults to `main`)
 
 ## Workflow
 
-1. Run `scripts/sync_skills.sh` with the project root path
-2. The script uses `rsync --delete` to mirror the skills directory (removed skills get removed from the repo too)
-3. If there are changes, it stages `skills/`, commits, and pushes
-4. If no changes are detected, it exits cleanly with a message
+1. Shallow clone the target repo to a temp directory
+2. Rsync skills into `skills/` (with `--delete` to mirror removals)
+3. Commit and push if changes exist
+4. Auto-cleanup temp directory on exit
 
-## Notes
+## Prerequisites
 
-- The `--delete` flag ensures the repo stays in sync — if a skill is uninstalled locally, it gets removed from the repo on next sync
-- The script excludes its own directory (`sync-skills`) to avoid circular syncing when installed via this repo
+- `git` with push access to the target repo (SSH key or HTTPS credentials)
+- `rsync` installed

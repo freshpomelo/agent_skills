@@ -3,9 +3,9 @@ set -euo pipefail
 
 # Configuration
 SKILLS_SRC="${HOME}/.claude/skills"
-REPO_DIR="${1:-.}"
-SKILLS_DEST="${REPO_DIR}/skills"
+REPO_URL="${1:?Usage: sync_skills.sh <github-repo-url> [commit-message]}"
 COMMIT_MSG="${2:-Sync skills from ~/.claude/skills}"
+BRANCH="${3:-main}"
 
 # Validate source exists
 if [ ! -d "$SKILLS_SRC" ]; then
@@ -13,13 +13,16 @@ if [ ! -d "$SKILLS_SRC" ]; then
   exit 1
 fi
 
-# Validate repo
-if ! git -C "$REPO_DIR" rev-parse --is-inside-work-tree &>/dev/null; then
-  echo "Error: $REPO_DIR is not a git repository" >&2
-  exit 1
-fi
+# Create temp directory and ensure cleanup
+TMPDIR=$(mktemp -d)
+trap 'rm -rf "$TMPDIR"' EXIT
 
-# Sync skills, excluding system skills, .skill packages, and __pycache__
+# Shallow clone
+echo "Cloning $REPO_URL ..."
+git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$TMPDIR/repo"
+
+# Sync skills
+SKILLS_DEST="$TMPDIR/repo/skills"
 echo "Syncing skills from $SKILLS_SRC to $SKILLS_DEST ..."
 rsync -av --delete \
   --exclude='.system' \
@@ -29,7 +32,7 @@ rsync -av --delete \
   "$SKILLS_SRC/" "$SKILLS_DEST/"
 
 # Check for changes
-cd "$REPO_DIR"
+cd "$TMPDIR/repo"
 if git diff --quiet && git diff --cached --quiet && [ -z "$(git ls-files --others --exclude-standard skills/)" ]; then
   echo "No changes to commit."
   exit 0
@@ -38,6 +41,6 @@ fi
 # Stage, commit, push
 git add skills/
 git commit -m "$COMMIT_MSG"
-echo "Pushing to remote..."
+echo "Pushing to $REPO_URL ..."
 git push
 echo "Done."
