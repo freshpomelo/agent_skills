@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Default repo (SSH) — override with first argument
+DEFAULT_REPO="git@github.com:freshpomelo/agent_skills.git"
+
 # Configuration
 SKILLS_SRC="${HOME}/.claude/skills"
-REPO_URL="${1:?Usage: sync_skills.sh <github-repo-url> [commit-message]}"
+REPO_URL="${1:-$DEFAULT_REPO}"
 COMMIT_MSG="${2:-Sync skills from ~/.claude/skills}"
 BRANCH="${3:-main}"
+
+# Auto-convert HTTPS to SSH to avoid interactive auth prompts
+if [[ "$REPO_URL" =~ ^https://github\.com/(.+)$ ]]; then
+  REPO_URL="git@github.com:${BASH_REMATCH[1]}"
+  # Ensure .git suffix
+  [[ "$REPO_URL" != *.git ]] && REPO_URL="${REPO_URL}.git"
+fi
 
 # Validate source exists
 if [ ! -d "$SKILLS_SRC" ]; then
@@ -28,6 +38,7 @@ rsync -av --delete \
   --exclude='.system' \
   --exclude='*.skill' \
   --exclude='__pycache__' \
+  --exclude='.DS_Store' \
   --exclude='sync-skills' \
   "$SKILLS_SRC/" "$SKILLS_DEST/"
 

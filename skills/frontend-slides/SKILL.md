@@ -204,7 +204,7 @@ When converting PowerPoint files:
    - File location, style name, slide count
    - Navigation: Arrow keys, Space, scroll/swipe, click nav dots
    - How to customize: `:root` CSS variables for colors, font link for typography, `.reveal` class for animations
-   - If inline editing was enabled: Hover top-left corner or press E to enter edit mode, click any text to edit, Ctrl+S to save
+   - If inline editing was enabled: Hover top-left corner or press E to enter edit mode, click any text to edit, Ctrl+S to save file (Chrome/Edge: first save picks location, subsequent saves overwrite directly; other browsers: downloads file). Edits auto-save to localStorage every 3s and restore on refresh
 
 ---
 

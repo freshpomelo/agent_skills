@@ -10,17 +10,25 @@ Sync all custom skills from `~/.claude/skills/` to a GitHub repo via temporary s
 ## What Gets Synced
 
 - All custom skill directories (each containing SKILL.md and resources)
-- Excludes: `.system/` (built-in skills), `*.skill` (package files), `__pycache__`, and the `sync-skills` skill itself
+- Excludes: `.system/` (built-in skills), `*.skill` (package files), `__pycache__`, `.DS_Store`, and the `sync-skills` skill itself
 
 ## Usage
 
 ```bash
-bash scripts/sync_skills.sh <github-repo-url> [commit-message] [branch]
+bash scripts/sync_skills.sh [github-repo-url] [commit-message] [branch]
 ```
 
-- `github-repo-url` (required): e.g. `git@github.com:user/repo.git` or `https://github.com/user/repo.git`
+- `github-repo-url`: Optional. Defaults to `git@github.com:freshpomelo/agent_skills.git`. HTTPS URLs are auto-converted to SSH.
 - `commit-message`: Optional (defaults to "Sync skills from ~/.claude/skills")
 - `branch`: Optional (defaults to `main`)
+
+## Quick Sync (no arguments needed)
+
+```bash
+bash scripts/sync_skills.sh
+```
+
+This pushes to the default repo using SSH.
 
 ## Workflow
 
@@ -31,5 +39,5 @@ bash scripts/sync_skills.sh <github-repo-url> [commit-message] [branch]
 
 ## Prerequisites
 
-- `git` with push access to the target repo (SSH key or HTTPS credentials)
+- `git` with SSH key configured for push access
 - `rsync` installed

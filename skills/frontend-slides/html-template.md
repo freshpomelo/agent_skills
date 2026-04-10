@@ -167,8 +167,9 @@ Every presentation must include:
 
 4. **Inline Editing** (only if user opted in during Phase 1 — skip entirely if they said No):
    - Edit toggle button (hidden by default, revealed via hover hotzone or `E` key)
-   - Auto-save to localStorage
-   - Export/save file functionality
+   - Auto-save to localStorage every 3 seconds (restore on page reload)
+   - File System Access API for direct file overwrite (Chrome/Edge), fallback to download
+   - Clean export: strips `contenteditable` attributes before saving
    - See "Inline Editing Implementation" section below
 
 ## Inline Editing Implementation (Opt-In Only)
@@ -181,8 +182,14 @@ Every presentation must include:
 
 HTML:
 ```html
-<div class="edit-hotzone"></div>
+<div class="edit-hotzone" id="editHotzone"></div>
 <button class="edit-toggle" id="editToggle" title="Edit mode (E)">✏️</button>
+<div class="edit-bar" id="editBar">
+    <span>Edit mode active</span>
+    <span>Click text to edit</span>
+    <span><kbd>Ctrl+S</kbd> Save to file</span>
+    <span><kbd>E</kbd> Exit</span>
+</div>
 ```
 
 CSS (visibility controlled by JS classes only):
@@ -207,17 +214,171 @@ CSS (visibility controlled by JS classes only):
     opacity: 1;
     pointer-events: auto;
 }
+.edit-bar {
+    position: fixed; top: 0; left: 0; right: 0;
+    background: rgba(0, 0, 0, 0.85);
+    color: #fff; display: flex; gap: 2rem;
+    justify-content: center; align-items: center;
+    padding: 8px; font-size: 13px; z-index: 9999;
+    transform: translateY(-100%);
+    transition: transform 0.3s ease;
+}
+.edit-bar.show { transform: translateY(0); }
+.edit-bar kbd {
+    background: rgba(255,255,255,0.15);
+    padding: 2px 6px; border-radius: 3px;
+    font-family: monospace;
+}
+[contenteditable="true"] {
+    outline: 2px dashed var(--accent, #00ffcc);
+    outline-offset: 2px;
+    min-height: 1em;
+}
 ```
 
-JS (three interaction methods):
-```javascript
-// 1. Click handler on the toggle button
-document.getElementById('editToggle').addEventListener('click', () => {
-    editor.toggleEditMode();
-});
+### InlineEditor Class (full implementation)
 
-// 2. Hotzone hover with 400ms grace period
-const hotzone = document.querySelector('.edit-hotzone');
+```javascript
+class InlineEditor {
+    constructor() {
+        this.isActive = false;
+        this.editableSelectors = 'h1, h2, h3, p, li, span, .stat-number, .stat-label, .name, .desc';
+        this.fileHandle = null;
+        this.storageKey = 'ppt_edit_backup';
+        this.restoreFromLocalStorage();
+    }
+
+    toggleEditMode() {
+        this.isActive = !this.isActive;
+        document.getElementById('editToggle').classList.toggle('active', this.isActive);
+        document.getElementById('editBar').classList.toggle('show', this.isActive);
+        document.querySelectorAll('.slide ' + this.editableSelectors).forEach(el => {
+            if (el.closest('.edit-bar') || el.closest('.nav-dots')) return;
+            el.setAttribute('contenteditable', this.isActive ? 'true' : 'false');
+        });
+        if (this.isActive) this.startAutoSave();
+        else this.stopAutoSave();
+    }
+
+    /* === localStorage auto-save: every 3s while editing === */
+    startAutoSave() {
+        this.autoSaveTimer = setInterval(() => this.saveToLocalStorage(), 3000);
+    }
+    stopAutoSave() {
+        clearInterval(this.autoSaveTimer);
+        this.saveToLocalStorage();
+    }
+    saveToLocalStorage() {
+        const data = {};
+        document.querySelectorAll('.slide ' + this.editableSelectors).forEach(el => {
+            if (el.closest('.edit-bar') || el.closest('.nav-dots')) return;
+            const id = this.getElementId(el);
+            if (id) data[id] = el.innerHTML;
+        });
+        localStorage.setItem(this.storageKey, JSON.stringify(data));
+    }
+    restoreFromLocalStorage() {
+        const raw = localStorage.getItem(this.storageKey);
+        if (!raw) return;
+        try {
+            const data = JSON.parse(raw);
+            if (Object.keys(data).length === 0) return;
+            document.querySelectorAll('.slide ' + this.editableSelectors).forEach(el => {
+                if (el.closest('.edit-bar') || el.closest('.nav-dots')) return;
+                const id = this.getElementId(el);
+                if (id && data[id] !== undefined && data[id] !== el.innerHTML) {
+                    el.innerHTML = data[id];
+                }
+            });
+        } catch(e) {}
+    }
+    getElementId(el) {
+        const slide = el.closest('.slide');
+        if (!slide) return null;
+        const slideIdx = Array.from(document.querySelectorAll('.slide')).indexOf(slide);
+        const tag = el.tagName.toLowerCase() + (el.className ? '.' + el.className.split(' ')[0] : '');
+        const siblings = Array.from(slide.querySelectorAll(
+            el.tagName.toLowerCase() + (el.className ? '.' + el.className.split(' ')[0] : '')
+        ));
+        return `s${slideIdx}_${tag}_${siblings.indexOf(el)}`;
+    }
+    clearLocalStorage() {
+        localStorage.removeItem(this.storageKey);
+    }
+
+    /* === Save to file: File System Access API (Chrome/Edge) with download fallback === */
+    async save() {
+        const html = this.getCleanHtml();
+
+        // Try File System Access API — allows direct overwrite after first pick
+        if (window.showSaveFilePicker) {
+            try {
+                if (!this.fileHandle) {
+                    this.fileHandle = await window.showSaveFilePicker({
+                        suggestedName: document.title + '.html',
+                        types: [{ description: 'HTML', accept: { 'text/html': ['.html'] } }]
+                    });
+                }
+                const writable = await this.fileHandle.createWritable();
+                await writable.write(html);
+                await writable.close();
+                this.showToast('Saved to file');
+                this.clearLocalStorage();
+                return;
+            } catch (e) {
+                if (e.name === 'AbortError') return; // user cancelled
+            }
+        }
+
+        // Fallback: download file
+        const blob = new Blob([html], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = document.title + '.html';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        this.showToast('File downloaded');
+        this.clearLocalStorage();
+    }
+
+    /* Strip contenteditable before export so saved HTML is clean */
+    getCleanHtml() {
+        const editables = document.querySelectorAll('[contenteditable="true"]');
+        editables.forEach(el => el.removeAttribute('contenteditable'));
+        const html = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+        if (this.isActive) {
+            document.querySelectorAll('.slide ' + this.editableSelectors).forEach(el => {
+                if (el.closest('.edit-bar') || el.closest('.nav-dots')) return;
+                el.setAttribute('contenteditable', 'true');
+            });
+        }
+        return html;
+    }
+
+    showToast(msg) {
+        let toast = document.getElementById('saveToast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'saveToast';
+            toast.style.cssText = 'position:fixed;bottom:30px;left:50%;transform:translateX(-50%);' +
+                'background:#4CAF50;color:#fff;padding:10px 24px;border-radius:8px;font-size:14px;' +
+                'z-index:99999;opacity:0;transition:opacity .3s;pointer-events:none;';
+            document.body.appendChild(toast);
+        }
+        toast.textContent = msg;
+        toast.style.opacity = '1';
+        setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+    }
+}
+```
+
+### Hotzone & Keyboard Wiring
+
+```javascript
+const editor = new InlineEditor();
+
+// Hotzone hover with 400ms grace period
+const hotzone = document.getElementById('editHotzone');
 const editToggle = document.getElementById('editToggle');
 let hideTimeout = null;
 
@@ -239,18 +400,29 @@ editToggle.addEventListener('mouseleave', () => {
     }, 400);
 });
 
-// 3. Hotzone direct click
-hotzone.addEventListener('click', () => {
-    editor.toggleEditMode();
-});
+// Click handlers
+editToggle.addEventListener('click', () => editor.toggleEditMode());
+hotzone.addEventListener('click', () => editor.toggleEditMode());
 
-// 4. Keyboard shortcut (E key, skip when editing text)
+// Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
     if ((e.key === 'e' || e.key === 'E') && !e.target.getAttribute('contenteditable')) {
         editor.toggleEditMode();
     }
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (editor.isActive) editor.save();
+    }
 });
 ```
+
+### Save Behavior Summary
+
+| Browser | First Save | Subsequent Saves |
+|---------|-----------|-----------------|
+| Chrome/Edge 86+ | File picker dialog (choose location) | Direct overwrite, no dialog |
+| Safari/Firefox | Downloads file | Downloads file |
+| All browsers | localStorage auto-save every 3s, restored on refresh | Same |
 
 ## Image Pipeline (Skip If No Images)
 
