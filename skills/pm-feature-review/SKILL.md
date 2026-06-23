@@ -76,7 +76,7 @@ description: PM（产品经理）视角的功能 review skill。当用户描述�
 
 #### 框架 D: PM 常见坑位 checklist
 
-这是产品经理最容易漏的"边角"，但 90% 的差体验都来自这里。详见 `references/pm-pitfalls-checklist.md`。
+这是产品经理最容易漏的"边角"，但 90% 的差体验都来自这里。
 
 至少要过一遍这些维度（**只要这个功能涉及，就要点出来**）：
 
@@ -207,4 +207,3 @@ ux-interaction-reviewer 偏纯交互设计师视角（操作流程、信息组�
 需要展开特定框架的细节时再读：
 - `references/nielsen-heuristics.md` — Nielsen 十大可用性原则的完整定义和典型反例
 - `references/jtbd-framework.md` — JTBD 用法、句式、常见误用
-- `references/pm-pitfalls-checklist.md` — PM 常见坑位 checklist 的扩展说明和真实案例
